@@ -1,5 +1,6 @@
 /* my comment  
    Is Long :)  */
+   
 bool  func1(int  a, b, c; char c1) 
 {
   var bool  result;
