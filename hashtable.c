@@ -1,10 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #define CAPACITY 50000 // Size of the Hash Table
 
+
+typedef struct scopeStack scopeStack;
+static int maxScope = 0;
 static int currScope = 0;
+
 typedef struct LinkedList LinkedList;
 typedef struct Declerations Declerations;
 typedef struct Properties Properties;
@@ -12,7 +15,6 @@ typedef struct Ht_item Ht_item;
 typedef struct Scope Scope;
 typedef struct HashTable HashTable;
 typedef struct StackNode StackNode;
-
 
 
 //maybe add value later... Avi!!!!!
@@ -285,7 +287,7 @@ void ht_insert(HashTable* table,Ht_item* item) {
                 Declerations* curr_dec = prv_dec;
                 while(curr_dec){
                     if (curr_dec->scopeNum == item->d->scopeNum){
-                        printf("id Same scope ERROR");
+                        printf("id Same scope ERROR\n");
                         exit(1);
                     }
                     prv_dec = curr_dec;
@@ -322,8 +324,8 @@ Ht_item* ht_search(HashTable* table, char* name) {
     }
     return NULL;
 }
-//dont actually need, keep for later
 
+//dont actually need, keep for later
 void ht_delete(HashTable* table, char* name) {
     // Deletes an item from the table
     int index = hash_function(name);
@@ -466,6 +468,17 @@ void scope_insert(Scope** scope, Ht_item* item) {
     return ;
 }
 
+Ht_item* scope_search(Scope* scope,char* name){
+    Scope* temp = scope;
+    while(temp){
+        if(strcmp(temp->item->name,name) == 0)
+            return temp->item;
+        temp = temp->next;
+    }
+    printf("didn't find id\n");
+    return NULL;
+}
+
 static Ht_item* scope_remove(Scope* scope,char* name) {
     Scope* prev = scope;
     Scope* curr = scope->next;
@@ -509,7 +522,7 @@ void print_scope(Scope* scope,int ScopeNum){
         Declerations* temp_dec = temp->item->d;
         while(temp_dec){
             if(temp_dec->scopeNum == ScopeNum){
-                printf("Kind:%s Type:%s\n",temp_dec->p->kind,temp_dec->p->type);
+                printf("Kind:%s Type:%s\n\n",temp_dec->p->kind,temp_dec->p->type);
             }
             temp_dec = temp_dec->next;
         }
@@ -542,14 +555,30 @@ void push(struct StackNode** root, Scope* scope)
     if(*root == NULL){
         *root = newNode(scope);
         (*root)->next = NULL;
-        printf("stack num %d pushed to stack\n",currScope);
-    }else{
-        currScope++;
+        printf("first of stack\nscope num %d pushed to stack\n",currScope);
+    }
+    else{
+        maxScope++;
+        currScope = maxScope;
         struct StackNode* stackNode = newNode(scope);
         stackNode->next = *root;
         *root = stackNode;
-        printf("stack num %d pushed to stack\n",currScope);
-        
+        printf("scope num %d pushed to stack\n",currScope);
+    }
+}
+
+void push_another(struct StackNode** root, Scope* scope)
+{
+    if(*root == NULL){
+        *root = newNode(scope);
+        (*root)->next = NULL;
+        printf("first of stack\nscope num %d pushed to stack\n",currScope);
+    }
+    else{
+        struct StackNode* stackNode = newNode(scope);
+        stackNode->next = *root;
+        *root = stackNode;
+        printf("scope num %d pushed to stack\n",currScope);
     }
 }
  
@@ -561,9 +590,14 @@ Scope* pop(struct StackNode** root)
     *root = (*root)->next;
     Scope* popped = temp->scope;
     temp->scope = NULL;
+    temp->next = NULL;
     free(temp);
-    printf("stack %d popped\n",currScope);
-    currScope--;
+    popped->next = NULL;
+    printf("scope num:%d popped\n",currScope);
+    if(*root){
+        currScope = (*root)->scopeNum;
+    }else
+        currScope = 0;
     return popped;
 }
  
@@ -588,6 +622,7 @@ void free_stack(StackNode** stack){
     while(isEmpty(*stack))
         free_scope(pop(stack));
     free(*stack);
+
 }
 
 void addItem(HashTable* hash,StackNode* stack,char* id,int scopeNum,char* type, char* kind){
@@ -631,18 +666,66 @@ void free_stack_and_hashtable(StackNode** stack,HashTable* hash){
 }
 
 
+void ERRMSG(char* str){
+    printf("----------------\n%s\n",str);
+}
 
-int main(){
-    HashTable* hash = create_table(CAPACITY);
-    StackNode* stack = newNode(NULL);
-    addItem(hash,stack,"x",currScope,"var","int");
-    push(&stack,NULL);
-    addItem(hash,stack,"x",currScope,"var","string");
-    addItem(hash,stack,"hamishim",currScope,"var","real");
+void checkAll(StackNode** stack, HashTable* hash){
+	Ht_item* item = ht_search(hash,"main");
+    if(!item){
+        ERRMSG("main not found!");
+    }else if (item->d->next != NULL){
+        ERRMSG("only one main!!!");
+    }else if(item->d->scopeNum != 0){
+        ERRMSG("main is not main!!");
+    } else {
+        Scope* scope_0 = pop(stack);
+        Scope** temp = peek(*stack);
+        while (*temp)
+        {
+            if(strcmp((*temp)->item->d->p->kind,"main Parameter") == 0){
+                ERRMSG("main can't have parameters!!!!");
+            }
+            (*temp) = (*temp)->next;
+        }
+    }
+}
 
-    print_hashtable(hash);
-    removeScope(hash,&stack);
-    print_stack(stack);
-    print_hashtable(hash);
-    return 0;
+Ht_item* checkID(HashTable* hash,char* name){
+    Ht_item* temp = ht_search(hash,name);
+    if(!temp){
+        ERRMSG(strcat(name," NOT YET DEFINED!!!!"));
+        exit(1);
+    }
+    return temp;
+}
+
+void checkType(char* type_help,char** type,char* op){
+    printf("%s %s %s\n",type_help,op,*type);
+    if(strcmp(type_help,"int") == 0 && strcmp(op,"assign") != 0){
+        if(strcmp(*type,"real") == 0){
+            printf("%s is allowed\n",op);  
+            strcpy(*type,"real");
+        } 
+    }else if (strcmp(type_help,"real") == 0 && strcmp(op,"assign")!= 0){
+        if(strcmp(*type,"int") == 0 ){
+            printf("%s is allowed\n",op);
+            strcpy(*type,"real");
+        }
+    }else if (strcmp(*type,type_help)==0){
+        printf("%s is allowed\n",op);
+    }else{
+        printf("%s is NOT allowed\n",op);
+        exit(1);
+    }
+}
+
+void copy_type(char** type, Ht_item* temp){
+    Declerations* d = temp->d;
+    Declerations* d_next = d->next;
+    while(d->next != NULL){
+        d = d_next;
+        d_next = d->next;
+    }
+    strcpy(*type,d->p->type);
 }
